@@ -97,7 +97,7 @@ export default {
 				if (method !== "GET") {
 					fetchOptions.body = job.params;
 				}
-				await fetch(job.url, fetchOptions);
+				fetch(job.url, fetchOptions);
 
 				// 2.2 计算下次运行时间
 				const interval = cronParser.parseExpression(job.cron);
