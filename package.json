@@ -8,6 +8,9 @@
 		"start": "wrangler dev",
 		"test": "vitest"
 	},
+	"dependencies": {
+		"cron": "^2.4.4"
+	},
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "^0.8.19",
 		"vitest": "~3.2.0",

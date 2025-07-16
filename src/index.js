@@ -8,6 +8,8 @@
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
+import { CronJob } from 'cron';
+
 export default {
 	async fetch(request, env, ctx) {
 		let input = {};
@@ -22,17 +24,22 @@ export default {
 			return new Response("Method Not Allowed", { status: 405 });
 		}
 
-		const { action, url, params, job_id, user_id, cron } = input;
+		const { action, url, params, job_id, user_id, cron, method } = input;
 		const db = env.DB;
 
 		try {
 			if (action === "create") {
-				if (!url || !params || !job_id || !user_id || !cron) {
+				if (!url || !params || !job_id || !user_id || !cron || !method) {
 					return new Response("缺少参数", { status: 400 });
 				}
+
+				// 计算 next_run_time
+				const cronJob = new CronJob(cron, () => {});
+				const nextRunTime = cronJob.nextDates().toDate().getTime();
+
 				await db.prepare(
-					"INSERT INTO mcp_scheduler_jobs (url, params, job_id, user_id, cron) VALUES (?, ?, ?, ?, ?)"
-				).bind(url, params, job_id, user_id, cron).run();
+					"INSERT INTO mcp_scheduler_jobs (url, params, job_id, user_id, cron, last_run_time, next_run_time, method) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+				).bind(url, params, job_id, user_id, cron, null, nextRunTime, method).run();
 				return new Response("创建成功");
 			}
 
@@ -65,12 +72,47 @@ export default {
 	},
 
 	async scheduled(event, env, ctx) {
-		try {
-			const response = await fetch("https://gateway-dev.xcelsior.ai/v1/mcp/task/me");
-			const data = await response.text(); // 如果 API 返回 JSON，可改为 response.json()
-			console.log('API 响应:', data);
-		} catch (err) {
-			console.error('API 调用失败:', err);
+		const db = env.DB;
+		const now = Date.now();
+
+		// 1. 查找所有需要执行的任务
+		const result = await db.prepare(
+			"SELECT * FROM mcp_scheduler_jobs WHERE next_run_time <= ?"
+		).bind(now).all();
+
+		const jobs = result.results || [];
+		if (jobs.length === 0) {
+			console.log('没有需要执行的定时任务');
+			return;
 		}
-	},
+
+		// 2. 依次异步处理每个 job
+		await Promise.all(jobs.map(async (job) => {
+			try {
+				const method = job.method ? job.method.toUpperCase() : "POST";
+				const fetchOptions = {
+					method,
+					headers: { "Content-Type": "application/json" }
+				};
+				if (method !== "GET") {
+					fetchOptions.body = job.params;
+				}
+				await fetch(job.url, fetchOptions);
+
+				// 2.2 计算下次运行时间
+				const cronJob = new CronJob(job.cron, () => {});
+				const nextRunTime = cronJob.nextDates().toDate().getTime();
+				const lastRunTime = Date.now();
+
+				// 2.3 更新数据库
+				await db.prepare(
+					"UPDATE mcp_scheduler_jobs SET last_run_time = ?, next_run_time = ? WHERE job_id = ?"
+				).bind(lastRunTime, nextRunTime, job.job_id).run();
+
+				console.log(`任务 ${job.job_id} 执行并更新成功`);
+			} catch (err) {
+				console.error(`任务 ${job.job_id} 执行失败:`, err);
+			}
+		}));
+	}
 };
