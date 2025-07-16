@@ -8,7 +8,7 @@
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
-import { CronJob } from 'cron';
+import parser from 'cron-parser';
 
 export default {
 	async fetch(request, env, ctx) {
@@ -34,8 +34,8 @@ export default {
 				}
 
 				// 计算 next_run_time
-				const cronJob = new CronJob(cron, () => {});
-				const nextRunTime = cronJob.nextDates().toDate().getTime();
+				const interval = parser.parseExpression(cron);
+				const nextRunTime = interval.next().getTime();
 
 				await db.prepare(
 					"INSERT INTO mcp_scheduler_jobs (url, params, job_id, user_id, cron, last_run_time, next_run_time, method) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
@@ -100,8 +100,8 @@ export default {
 				await fetch(job.url, fetchOptions);
 
 				// 2.2 计算下次运行时间
-				const cronJob = new CronJob(job.cron, () => {});
-				const nextRunTime = cronJob.nextDates().toDate().getTime();
+				const interval = parser.parseExpression(job.cron);
+				const nextRunTime = interval.next().getTime();
 				const lastRunTime = Date.now();
 
 				// 2.3 更新数据库
