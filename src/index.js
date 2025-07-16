@@ -8,7 +8,7 @@
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
-import cronParser from 'cron-parser';
+const cronParser = require('cron-parser');
 
 export default {
 	async fetch(request, env, ctx) {
