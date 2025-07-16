@@ -8,7 +8,7 @@
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
-const cronParser = require('cron-parser');
+import { CronExpressionParser } from 'cron-parser';
 
 export default {
 	async fetch(request, env, ctx) {
@@ -34,7 +34,7 @@ export default {
 				}
 
 				// 计算 next_run_time
-				const interval = cronParser.parseExpression(cron);
+				const interval = CronExpressionParser.parse(cron);
 				const nextRunTime = interval.next().getTime();
 
 				await db.prepare(
@@ -101,7 +101,7 @@ export default {
 				console.log(response.text());
 
 				// 2.2 计算下次运行时间
-				const interval = cronParser.parseExpression(job.cron);
+				const interval = CronExpressionParser.parse(job.cron);
 				const nextRunTime = interval.next().getTime();
 				const lastRunTime = Date.now();
 
