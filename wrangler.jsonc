@@ -12,7 +12,10 @@
 	},
 	"triggers": {
 		"crons": ["*/5 * * * *"]
-	}
+	},
+	"d1_databases": [
+		{ "binding": "DB", "database_name": "mcp_db", "database_id": "mcp_scheduler_jobs" }
+	]
 	/**
 	 * Smart Placement
 	 * Docs: https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement

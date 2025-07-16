@@ -10,7 +10,58 @@
 
 export default {
 	async fetch(request, env, ctx) {
-		return new Response('Hello World!');
+		let input = {};
+		if (request.method === "POST") {
+			input = await request.json();
+		} else if (request.method === "GET") {
+			const url = new URL(request.url);
+			for (const [k, v] of url.searchParams.entries()) {
+				input[k] = v;
+			}
+		} else {
+			return new Response("Method Not Allowed", { status: 405 });
+		}
+
+		const { action, url, params, job_id, user_id, cron } = input;
+		const db = env.DB;
+
+		try {
+			if (action === "create") {
+				if (!url || !params || !job_id || !user_id || !cron) {
+					return new Response("缺少参数", { status: 400 });
+				}
+				await db.prepare(
+					"INSERT INTO mcp_scheduler_jobs (url, params, job_id, user_id, cron) VALUES (?, ?, ?, ?, ?)"
+				).bind(url, params, job_id, user_id, cron).run();
+				return new Response("创建成功");
+			}
+
+			if (action === "delete") {
+				if (!job_id) {
+					return new Response("缺少 job_id", { status: 400 });
+				}
+				await db.prepare("DELETE FROM mcp_scheduler_jobs WHERE job_id = ?").bind(job_id).run();
+				return new Response("删除成功");
+			}
+
+			if (action === "query") {
+				let result;
+				if (job_id) {
+					result = await db.prepare("SELECT * FROM mcp_scheduler_jobs WHERE job_id = ?").bind(job_id).all();
+				} else if (user_id) {
+					result = await db.prepare("SELECT * FROM mcp_scheduler_jobs WHERE user_id = ?").bind(user_id).all();
+				} else {
+					result = await db.prepare("SELECT * FROM mcp_scheduler_jobs").all();
+				}
+				return new Response(JSON.stringify(result.results), {
+					headers: { "Content-Type": "application/json" }
+				});
+			}
+
+			return new Response("未知 action", { status: 400 });
+		} catch (err) {
+			return new Response("数据库操作失败: " + err.message, { status: 500 });
+		}
 	},
 
 	async scheduled(event, env, ctx) {
