@@ -14,13 +14,12 @@ export default {
 	},
 
 	async scheduled(event, env, ctx) {
-		// 这里放置您的定时任务逻辑
-		console.log('定时任务执行时间:', new Date().toISOString());
-		
-		// 示例：您可以在这里执行各种定时任务
-		// 比如发送 HTTP 请求、处理数据、发送通知等
-		
-		// 返回成功状态
-		return new Response('定时任务执行成功', { status: 200 });
+		try {
+			const response = await fetch("https://gateway-dev.xcelsior.ai/v1/mcp/task/me");
+			const data = await response.text(); // 如果 API 返回 JSON，可改为 response.json()
+			console.log('API 响应:', data);
+		} catch (err) {
+			console.error('API 调用失败:', err);
+		}
 	},
 };
