@@ -24,31 +24,75 @@ export default {
 			return new Response("Method Not Allowed", { status: 405 });
 		}
 
-		const { action, url, params, job_id, user_id, cron, method } = input;
+		const { action, url, params, job_id, user_id, cron, method, header, type } = input;
+		if (!type) {
+			return new Response("Missing type", { status: 400 });
+		}
 		const db = env.DB;
 
 		try {
 			if (action === "create") {
 				if (!url || !params || !job_id || !user_id || !cron || !method) {
-					return new Response("缺少参数", { status: 400 });
+					return new Response("Missing parameters", { status: 400 });
 				}
 
-				// 计算 next_run_time
+				// Convert params and header objects to strings for storage
+				const paramsStr = typeof params === 'object' ? JSON.stringify(params) : params;
+				const headerStr = typeof header === 'object' ? JSON.stringify(header) : (header || '');
+
+				// Calculate next_run_time
 				const interval = CronExpressionParser.parse(cron);
 				const nextRunTime = interval.next().getTime();
 
 				await db.prepare(
-					"INSERT INTO mcp_scheduler_jobs (url, params, job_id, user_id, cron, last_run_time, next_run_time, method) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-				).bind(url, params, job_id, user_id, cron, null, nextRunTime, method).run();
-				return new Response("创建成功");
+					"INSERT INTO mcp_scheduler_jobs (url, params, job_id, user_id, cron, last_run_time, next_run_time, method, header, type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+				).bind(url, paramsStr, job_id, user_id, cron, null, nextRunTime, method, headerStr, type || '').run();
+				return new Response("Creation successful");
 			}
 
 			if (action === "delete") {
 				if (!job_id) {
-					return new Response("缺少 job_id", { status: 400 });
+					return new Response("Missing job_id", { status: 400 });
 				}
 				await db.prepare("DELETE FROM mcp_scheduler_jobs WHERE job_id = ?").bind(job_id).run();
-				return new Response("删除成功");
+				return new Response("Deletion successful");
+			}
+
+			if (action === "update") {
+				if (!job_id || !user_id) {
+					return new Response("Missing job_id or user_id", { status: 400 });
+				}
+
+				// Check if job exists and belongs to the user
+				const existingJob = await db.prepare("SELECT * FROM mcp_scheduler_jobs WHERE job_id = ? AND user_id = ?").bind(job_id, user_id).first();
+				if (!existingJob) {
+					return new Response("Job not found or access denied", { status: 404 });
+				}
+
+				// Convert params and header objects to strings for storage
+				const paramsStr = typeof params === 'object' ? JSON.stringify(params) : (params || existingJob.params);
+				const headerStr = typeof header === 'object' ? JSON.stringify(header) : (header || existingJob.header);
+
+				// Calculate next_run_time if cron is changed
+				let nextRunTime = existingJob.next_run_time;
+				if (cron && cron !== existingJob.cron) {
+					const interval = CronExpressionParser.parse(cron);
+					nextRunTime = interval.next().getTime();
+				}
+
+				await db.prepare(
+					"UPDATE mcp_scheduler_jobs SET url = ?, params = ?, cron = ?, method = ?, header = ?, next_run_time = ? WHERE job_id = ? AND user_id = ?"
+				).bind(
+					url || existingJob.url,
+					paramsStr,
+					cron || existingJob.cron,
+					method || existingJob.method,
+					headerStr,
+					nextRunTime,
+					job_id,
+					user_id
+				).run();
+				return new Response("Update successful");
 			}
 
 			if (action === "query") {
@@ -65,9 +109,9 @@ export default {
 				});
 			}
 
-			return new Response("未知 action", { status: 400 });
+			return new Response("Unknown action", { status: 400 });
 		} catch (err) {
-			return new Response("数据库操作失败: " + err.message, { status: 500 });
+			return new Response("Database operation failed: " + err.message, { status: 500 });
 		}
 	},
 
