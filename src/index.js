@@ -114,48 +114,50 @@ export default {
 	},
 
 	async scheduled(event, env, ctx) {
-		const db = env.DB;
-		const now = Date.now();
+        const db = env.DB;
+        const now = Date.now();
 
-		// 1. 查找所有需要执行的任务
-		const result = await db.prepare(
-			"SELECT * FROM mcp_scheduler_jobs WHERE next_run_time <= ?"
-		).bind(now).all();
+        // 1. Find all jobs that need to be executed
+        const result = await db.prepare(
+            "SELECT * FROM mcp_scheduler_jobs WHERE next_run_time <= ?"
+        ).bind(now).all();
 
-		const jobs = result.results || [];
-		if (jobs.length === 0) {
-			console.log('没有需要执行的定时任务');
-			return;
-		}
+        const jobs = result.results || [];
+        if (jobs.length === 0) {
+            console.log('No scheduled tasks to execute');
+            return;
+        }
 
-		// 2. 依次异步处理每个 job
-		await Promise.all(jobs.map(async (job) => {
-			try {
-				const method = job.method ? job.method.toUpperCase() : "POST";
-				const fetchOptions = {
-					method,
-					headers: { "Content-Type": "application/json" }
-				};
-				if (method !== "GET") {
-					fetchOptions.body = job.params;
-				}
-				const response = await fetch(job.url, fetchOptions);
-				console.log(response.text());
+        // 2. Asynchronously process each job
+        await Promise.all(jobs.map(async (job) => {
+            try {
+                // Call the fixed trigger entry API
+                const response = await fetch("https://gateway-dev.xcelsior.ai/v1/mcp/task/action", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "run_task_token": "123e4567-e89b-12d3-a456-426614174000"
+                    },
+                    body: JSON.stringify(job) // Pass the entire job object as a parameter
+                });
 
-				// 2.2 计算下次运行时间
-				const interval = CronExpressionParser.parse(job.cron);
-				const nextRunTime = interval.next().getTime();
-				const lastRunTime = Date.now();
+                const responseText = await response.text();
+                console.log(`Task ${job.job_id} trigger response:`, responseText);
 
-				// 2.3 更新数据库
-				await db.prepare(
-					"UPDATE mcp_scheduler_jobs SET last_run_time = ?, next_run_time = ? WHERE job_id = ?"
-				).bind(lastRunTime, nextRunTime, job.job_id).run();
+                // 2.2 Calculate the next run time
+                const interval = CronExpressionParser.parse(job.cron);
+                const nextRunTime = interval.next().getTime();
+                const lastRunTime = Date.now();
 
-				console.log(`任务 ${job.job_id} 执行并更新成功`);
-			} catch (err) {
-				console.error(`任务 ${job.job_id} 执行失败:`, err);
-			}
-		}));
-	}
+                // 2.3 Update the database
+                await db.prepare(
+                    "UPDATE mcp_scheduler_jobs SET last_run_time = ?, next_run_time = ? WHERE job_id = ?"
+                ).bind(lastRunTime, nextRunTime, job.job_id).run();
+
+                console.log(`Task ${job.job_id} executed and updated successfully`);
+            } catch (err) {
+                console.error(`Task ${job.job_id} execution failed:`, err);
+            }
+        }));
+    }
 };
