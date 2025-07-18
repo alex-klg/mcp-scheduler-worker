@@ -58,7 +58,7 @@ export default {
 				return new Response(JSON.stringify({ code: 0, msg: "Deletion successful" }), { headers: { "Content-Type": "application/json" } });
 			}
 
-			if (action === "update") {
+			if (action === "edit") {
 				if (!job_id || !user_id) {
 					return new Response(JSON.stringify({ code: 1, msg: "Missing job_id or user_id" }), { headers: { "Content-Type": "application/json" } });
 				}
