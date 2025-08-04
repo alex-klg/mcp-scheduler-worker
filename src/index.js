@@ -24,7 +24,7 @@ export default {
 			return new Response("Method Not Allowed", { status: 405 });
 		}
 
-		const { action, url, params, job_id, user_id, cron, method, header, type } = input;
+		const { action, url, params, job_id, user_id, cron, method, headers, type } = input;
 		if (!type) {
 			return new Response("Missing type", { status: 400 });
 		}
@@ -38,14 +38,14 @@ export default {
 
 				// Convert params and header objects to strings for storage
 				const paramsStr = typeof params === 'object' ? JSON.stringify(params) : params;
-				const headerStr = typeof header === 'object' ? JSON.stringify(header) : (header || '');
+				const headerStr = typeof headers === 'object' ? JSON.stringify(headers) : (headers || '');
 
 				// Calculate next_run_time
 				const interval = CronExpressionParser.parse(cron);
 				const nextRunTime = interval.next().getTime();
 
 				await db.prepare(
-					"INSERT INTO mcp_scheduler_jobs (url, params, job_id, user_id, cron, last_run_time, next_run_time, method, header, type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+					"INSERT INTO mcp_scheduler_jobs (url, params, job_id, user_id, cron, last_run_time, next_run_time, method, headers, type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 				).bind(url, paramsStr, job_id, user_id, cron, null, nextRunTime, method, headerStr, type || '').run();
 				return new Response(JSON.stringify({ code: 0, msg: "Creation successful" }), { headers: { "Content-Type": "application/json" } });
 			}
@@ -71,7 +71,7 @@ export default {
 
 				// Convert params and header objects to strings for storage
 				const paramsStr = typeof params === 'object' ? JSON.stringify(params) : (params || existingJob.params);
-				const headerStr = typeof header === 'object' ? JSON.stringify(header) : (header || existingJob.header);
+				const headerStr = typeof headers === 'object' ? JSON.stringify(headers) : (headers || existingJob.headers);
 
 				// Calculate next_run_time if cron is changed
 				let nextRunTime = existingJob.next_run_time;
@@ -81,7 +81,7 @@ export default {
 				}
 
 				await db.prepare(
-					"UPDATE mcp_scheduler_jobs SET url = ?, params = ?, cron = ?, method = ?, header = ?, next_run_time = ? WHERE job_id = ? AND user_id = ?"
+					"UPDATE mcp_scheduler_jobs SET url = ?, params = ?, cron = ?, method = ?, headers = ?, next_run_time = ? WHERE job_id = ? AND user_id = ?"
 				).bind(
 					url || existingJob.url,
 					paramsStr,
@@ -136,7 +136,7 @@ export default {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
-                        "run-task-token": "123e4567-e89b-12d3-a456-426614174000"
+                        "run-task-token": "79951001-8b87-435a-bad9-2e7ef53259af"
                     },
                     body: JSON.stringify(job) // Pass the entire job object as a parameter
                 });
