@@ -24,7 +24,7 @@ export default {
 			return new Response("Method Not Allowed", { status: 405 });
 		}
 
-		const { action, url, params, job_id, user_id, cron, method, headers, type } = input;
+		const { action, url, params, job_id, user_id, cron, method, headers, type, status } = input;
 		if (!type) {
 			return new Response("Missing type", { status: 400 });
 		}
@@ -44,9 +44,12 @@ export default {
 				const interval = CronExpressionParser.parse(cron);
 				const nextRunTime = interval.next().getTime();
 
+				// Set default status to 'active' if not provided
+				const jobStatus = status || 'active';
+
 				await db.prepare(
-					"INSERT INTO mcp_scheduler_jobs (url, params, job_id, user_id, cron, last_run_time, next_run_time, method, headers, type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-				).bind(url, paramsStr, job_id, user_id, cron, null, nextRunTime, method, headerStr, type || '').run();
+					"INSERT INTO mcp_scheduler_jobs (url, params, job_id, user_id, cron, last_run_time, next_run_time, method, headers, type, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+				).bind(url, paramsStr, job_id, user_id, cron, null, nextRunTime, method, headerStr, type || '', jobStatus).run();
 				return new Response(JSON.stringify({ code: 0, msg: "Creation successful" }), { headers: { "Content-Type": "application/json" } });
 			}
 
@@ -69,6 +72,9 @@ export default {
 					return new Response(JSON.stringify({ code: 2, msg: "Job not found or access denied" }), { headers: { "Content-Type": "application/json" } });
 				}
 
+				// 处理状态更新
+				const jobStatus = status !== undefined ? status : existingJob.status;
+
 				// Convert params and header objects to strings for storage
 				const paramsStr = typeof params === 'object' ? JSON.stringify(params) : (params || existingJob.params);
 				const headerStr = typeof headers === 'object' ? JSON.stringify(headers) : (headers || existingJob.headers);
@@ -81,7 +87,7 @@ export default {
 				}
 
 				await db.prepare(
-					"UPDATE mcp_scheduler_jobs SET url = ?, params = ?, cron = ?, method = ?, headers = ?, next_run_time = ? WHERE job_id = ? AND user_id = ?"
+					"UPDATE mcp_scheduler_jobs SET url = ?, params = ?, cron = ?, method = ?, headers = ?, next_run_time = ?, status = ? WHERE job_id = ? AND user_id = ?"
 				).bind(
 					url || existingJob.url,
 					paramsStr,
@@ -89,9 +95,11 @@ export default {
 					method || existingJob.method,
 					headerStr,
 					nextRunTime,
+					jobStatus,
 					job_id,
 					user_id
 				).run();
+
 				return new Response(JSON.stringify({ code: 0, msg: "Update successful" }), { headers: { "Content-Type": "application/json" } });
 			}
 
@@ -117,14 +125,14 @@ export default {
         const db = env.DB;
         const now = Date.now();
 
-        // 1. Find all jobs that need to be executed
+        // 1. Find all active jobs that need to be executed
         const result = await db.prepare(
-            "SELECT * FROM mcp_scheduler_jobs WHERE next_run_time <= ?"
+            "SELECT * FROM mcp_scheduler_jobs WHERE next_run_time <= ? AND status = 'active'"
         ).bind(now).all();
 
         const jobs = result.results || [];
         if (jobs.length === 0) {
-            console.log('No scheduled tasks to execute');
+            console.log('No active scheduled tasks to execute');
             return;
         }
 
