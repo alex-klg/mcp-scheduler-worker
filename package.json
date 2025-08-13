@@ -9,7 +9,7 @@
 		"test": "vitest"
 	},
 	"dependencies": {
-		"cron-parser": "^5.3.0"
+		"@breejs/later": "^2.0.0"
 	},
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "^0.8.19",

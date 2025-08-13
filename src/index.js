@@ -8,7 +8,27 @@
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
-import { CronExpressionParser } from 'cron-parser';
+const later = require('@breejs/later');
+
+// 辅助函数：解析cron表达式并计算下次执行时间
+function parseCronAndGetNextRunTime(cronExpression) {
+	const hasSeconds = cronExpression.split(' ').length === 7;
+	const schedule = later.parse.cron(cronExpression, hasSeconds);
+	const nextRunTime = later.schedule(schedule).next(1);
+	
+	if (!nextRunTime) {
+		throw new Error("该cron未来没有触发执行的时间点");
+	}
+	
+	const timestamp = nextRunTime.getTime();
+	
+	// 验证是否有未来的执行时间点
+	if (timestamp === 0) {
+		throw new Error("该cron未来没有触发执行的时间点");
+	}
+	
+	return timestamp;
+}
 
 export default {
 	async fetch(request, env, ctx) {
@@ -41,8 +61,12 @@ export default {
 				const headerStr = typeof headers === 'object' ? JSON.stringify(headers) : (headers || '');
 
 				// Calculate next_run_time
-				const interval = CronExpressionParser.parse(cron);
-				const nextRunTime = interval.next().getTime();
+				let nextRunTime;
+				try {
+					nextRunTime = parseCronAndGetNextRunTime(cron);
+				} catch (error) {
+					return new Response(JSON.stringify({ code: 2, msg: error.message }), { headers: { "Content-Type": "application/json" } });
+				}
 
 				// Set default status to 'active' if not provided
 				const jobStatus = status || 'active';
@@ -82,8 +106,11 @@ export default {
 				// Calculate next_run_time if cron is changed
 				let nextRunTime = existingJob.next_run_time;
 				if (cron && cron !== existingJob.cron) {
-					const interval = CronExpressionParser.parse(cron);
-					nextRunTime = interval.next().getTime();
+					try {
+						nextRunTime = parseCronAndGetNextRunTime(cron);
+					} catch (error) {
+						return new Response(JSON.stringify({ code: 2, msg: error.message }), { headers: { "Content-Type": "application/json" } });
+					}
 				}
 
 				await db.prepare(
@@ -127,7 +154,7 @@ export default {
 
         // 1. Find all active jobs that need to be executed
         const result = await db.prepare(
-            "SELECT * FROM mcp_scheduler_jobs WHERE next_run_time <= ? AND status = 'active'"
+            "SELECT * FROM mcp_scheduler_jobs WHERE next_run_time <= ? AND status = 'active' and next_run_time > 0"
         ).bind(now).all();
 
         const jobs = result.results || [];
@@ -153,8 +180,13 @@ export default {
                 console.log(`Task ${job.job_id} trigger response:`, responseText);
 
                 // 2.2 Calculate the next run time
-                const interval = CronExpressionParser.parse(job.cron);
-                const nextRunTime = interval.next().getTime();
+                let nextRunTime;
+                try {
+                    nextRunTime = parseCronAndGetNextRunTime(job.cron);
+                } catch (error) {
+                    console.error(`Task ${job.job_id} cron parsing failed:`, error.message);
+                    nextRunTime = 0;
+                }
                 const lastRunTime = Date.now();
 
                 // 2.3 Update the database
