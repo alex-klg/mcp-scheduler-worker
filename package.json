@@ -9,7 +9,7 @@
 		"test": "vitest"
 	},
 	"dependencies": {
-		"@breejs/later": "^2.0.0"
+		"@breejs/later": "^4.2.0"
 	},
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "^0.8.19",
