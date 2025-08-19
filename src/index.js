@@ -168,7 +168,7 @@ export default {
         await Promise.all(jobs.map(async (job) => {
             try {
                 // Call the fixed trigger entry API
-                const response = await fetch("https://gateway-dev.xcelsior.ai/api/v1/event/schedule/action", {
+                const response = await fetch("https://play-be-dev.omnimcp.ai/api/v1/event/schedule/action", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
