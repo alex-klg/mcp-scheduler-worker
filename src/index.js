@@ -45,6 +45,7 @@ export default {
 		}
 
 		const { action, url, params, job_id, user_id, cron, method, headers, type, status } = input;
+		console.log("input", input);
 		if (!type) {
 			return new Response("Missing type", { status: 400 });
 		}
@@ -167,7 +168,7 @@ export default {
         await Promise.all(jobs.map(async (job) => {
             try {
                 // Call the fixed trigger entry API
-                const response = await fetch("https://gateway-dev.xcelsior.ai/v1/mcp/task/action", {
+                const response = await fetch("https://gateway-dev.xcelsior.ai/api/v1/event/schedule/action", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
